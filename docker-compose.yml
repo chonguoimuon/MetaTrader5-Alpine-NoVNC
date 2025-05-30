@@ -1,0 +1,66 @@
+version: '3.8'
+services:
+  metatrader5_novnc:
+    image: ghcr.io/chonguoimuon/metatrader5_novnc/base:latest
+    # build:
+      # context: .
+      # dockerfile: Dockerfile    
+    environment:
+      - CUSTOM_USER=${CUSTOM_USER}
+      - PASSWORD=${PASSWORD}
+      - MT5_API_AUTH_TOKEN=${MT5_API_AUTH_TOKEN}
+    ports:
+      - "3000:3000"  # Internal port for VNC
+      - "5001:5001"  # Internal port for API
+    volumes:
+      - config:/config
+    restart: unless-stopped
+    container_name: metatrader5_novnc
+    networks:
+      - mt5-network
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1      
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"  # Limit each log file to 1MB
+        max-file: "1"   # Keep only 1 log file
+
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    ports:
+      - "80:80"    # HTTP port
+      - "443:443"  # HTTPS port
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile  # Mount custom Caddyfile
+      - caddy_data:/data  # Persist certificates and data
+      - caddy_config:/config  # Persist Caddy config
+    environment:
+      - EMAIL=${CADDY_EMAIL}
+      - VNCDOMAIN=${VNCDOMAIN}
+      - APIDOMAIN=${APIDOMAIN}
+    container_name: caddy
+    networks:
+      - mt5-network
+    depends_on:
+      - metatrader5_novnc
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"  # Limit each log file to 1MB
+        max-file: "1"   # Keep only 1 log file
+
+volumes:
+  config:
+    name: config
+  caddy_data:
+    name: caddy_data
+  caddy_config:
+    name: caddy_config
+
+networks:
+  mt5-network:
+    name: mt5-network
+    driver: bridge

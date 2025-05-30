@@ -1,0 +1,7 @@
+{$VNCDOMAIN} {
+  reverse_proxy metatrader5_novnc:3000
+}
+
+{$APIDOMAIN} {
+  reverse_proxy metatrader5_novnc:5001
+}
