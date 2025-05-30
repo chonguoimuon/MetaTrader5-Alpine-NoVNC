@@ -1,6 +1,6 @@
 # MetaTrader 5 Docker Setup
 
-![Banner](https://raw.githubusercontent.com/chonguoimuon/MetaTrader5-Alpine-NoVNC/refs/heads/main/image/SWAGGER.png)
+![Banner](https://github.com/chonguoimuon/MetaTrader5-Alpine-NoVNC/blob/main/image/your-api-domain.com.png?raw=true)
 
 ## Table of Contents
 
