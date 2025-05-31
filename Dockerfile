@@ -27,6 +27,10 @@ RUN apk add --no-cache \
     mkdir -p /root/.vnc /config/.wine /var/log /etc/nginx/conf.d && \
     touch /var/log/mt5_setup.log && \
     chmod 666 /var/log/mt5_setup.log && \
+    touch /var/log/websockify.log && \
+    chmod 666 /var/log/websockify.log && \
+    touch /var/log/x11vnc.log && \
+    chmod 666 /var/log/x11vnc.log && \
     rm -rf /var/cache/apk/* /tmp/* /root/.cache /var/tmp/*
 
 # Copy only necessary noVNC files from builder stage
@@ -59,14 +63,15 @@ RUN echo 'worker_processes 1;' > /etc/nginx/nginx.conf && \
 ENV DISPLAY=:1 \
     VNC_PORT=5901 \
     NOVNC_PORT=6080 \
+    WEBSOCKIFY_PORT=6081 \
     WINEPREFIX=/config/.wine \
     WINEDEBUG=-all,err-toolbar,fixme-all
 
 # Expose ports for noVNC and Flask
-EXPOSE 3000 5001
+EXPOSE 6080 5001
 
 # Persistent volume for Wine configuration
 VOLUME /config
 
 # Start services with continuous command for HTTP Basic Auth
-CMD ["/bin/bash", "-c", "echo 'Starting services...' && echo 'Generating Xauthority...' && touch /root/.Xauthority && xauth add $(hostname):1 . $(mcookie) && echo 'Starting Xvfb...' && Xvfb :1 -screen 0 1920x1080x16 & sleep 5 && echo 'Starting x11vnc...' && x11vnc -display :1 -nopw -forever -rfbport 5901 -scale_cursor 1 -auth /root/.Xauthority & sleep 2 && echo 'Setting up nginx...' && if [ -n \"${CUSTOM_USER}\" ] && [ -n \"${PASSWORD}\" ]; then echo \"Setting up auth for user: ${CUSTOM_USER}\" && htpasswd -cb /etc/nginx/.htpasswd \"${CUSTOM_USER}\" \"${PASSWORD}\" && echo 'server { listen 3000; server_name 0.0.0.0; auth_basic \"Restricted Access\"; auth_basic_user_file /etc/nginx/.htpasswd; location / { root /opt/novnc; index index.html vnc.html; } location /websockify { proxy_pass http://0.0.0.0:6081; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection \"upgrade\"; proxy_set_header Host $host; } }' > /etc/nginx/conf.d/novnc.conf; else echo 'No auth set, serving noVNC directly' && echo 'server { listen 3000; server_name 0.0.0.0; location / { root /opt/novnc; index index.html vnc.html; } location /websockify { proxy_pass http://0.0.0.0:6081; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection \"upgrade\"; proxy_set_header Host $host; } }' > /etc/nginx/conf.d/novnc.conf; fi && echo 'Testing nginx config...' && nginx -t && echo 'Starting nginx...' && nginx -g 'daemon off;' & sleep 1 && echo 'Starting websockify...' && websockify --web /opt/novnc 6081 0.0.0.0:5901 & sleep 1 && /desktop=shell,1920x1080 & /bin/bash /scripts/01-start.sh || echo 'Failed to run /scripts/01-start.sh'"]
+CMD ["/bin/bash", "-c", "echo 'Starting services...' && echo 'Generating Xauthority...' && touch /root/.Xauthority && xauth add $(hostname):1 . $(mcookie) && echo 'Starting Xvfb...' && Xvfb :1 -screen 0 1920x1080x16 & sleep 10 && echo 'Starting x11vnc...' && x11vnc -display :1 -nopw -forever -rfbport 5901 -scale_cursor 1 -auth /root/.Xauthority -o /var/log/x11vnc.log & sleep 2 && echo 'Starting websockify...' && websockify --web /opt/novnc 6081 0.0.0.0:5901 > /var/log/websockify.log 2>&1 & sleep 1 && echo 'Setting up nginx...' && if [ -n \"${CUSTOM_USER}\" ] && [ -n \"${PASSWORD}\" ]; then echo \"Setting up auth for user: ${CUSTOM_USER}\" && htpasswd -cb /etc/nginx/.htpasswd \"${CUSTOM_USER}\" \"${PASSWORD}\" && echo 'server { listen 6080; server_name 0.0.0.0; auth_basic \"Restricted Access\"; auth_basic_user_file /etc/nginx/.htpasswd; location / { root /opt/novnc; index index.html vnc.html; } location /websockify { proxy_pass http://127.0.0.1:6081; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection \"upgrade\"; proxy_set_header Host $host; proxy_read_timeout 3600; proxy_send_timeout 3600; proxy_connect_timeout 3600; } }' > /etc/nginx/conf.d/novnc.conf; else echo 'No auth set, serving noVNC directly' && echo 'server { listen 6080; server_name 0.0.0.0; location / { root /opt/novnc; index index.html vnc.html; } location /websockify { proxy_pass http://127.0.0.1:6081; proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection \"upgrade\"; proxy_set_header Host $host; proxy_read_timeout 3600; proxy_send_timeout 3600; proxy_connect_timeout 3600; } }' > /etc/nginx/conf.d/novnc.conf; fi && echo 'Testing nginx config...' && nginx -t && echo 'Starting nginx...' && nginx -g 'daemon off;' & sleep 1 && /bin/bash /scripts/01-start.sh || echo 'Failed to run /scripts/01-start.sh'"]

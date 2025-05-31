@@ -15,7 +15,7 @@ FLASK_PID=$!
 sleep 5
 
 # Check if the Flask server is running
-if ps -p $FLASK_PID > /dev/null; then
+if ps | grep $FLASK_PID > /dev/null; then
     log_message "INFO" "Flask server in Wine started successfully with PID $FLASK_PID."
 else
     log_message "ERROR" "Failed to start Flask server in Wine."

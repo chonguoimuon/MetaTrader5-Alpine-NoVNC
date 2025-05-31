@@ -133,9 +133,9 @@ This command builds the Docker images and starts the services in detached mode.
 
    - **View Logs:**
 
-     ```bash
-     docker-compose logs -f
+     ```bash	 
 	 docker logs caddy
+	 
 	 docker logs metatrader5_novnc
      ```
 

@@ -14,15 +14,15 @@ swagger_config = {
     "static_url_path": "/flasgger_static",
     "swagger_ui": True,
     "specs_route": "/apidocs/",
-    "title": "MT5 Trading Bot API",
-    "description": "API for interacting with MetaTrader5 trading bot. Authorize with your API token in the Authorization header.",
+    "title": "MT5 Trading API",
+    "description": "API for interacting with MetaTrader5 trading. Authorize with your API token in the Authorization header.",
     "version": "1.0.0",
     "securityDefinitions": {
         "ApiKeyAuth": {
             "type": "apiKey",
             "name": "Authorization",
             "in": "header",
-            "description": "Enter your API token (e.g., '2010201119092012'). This will be sent as the Authorization header."
+            "description": "Enter your API token (e.g., '0123456789....xyz'). This will be sent as the Authorization header."
         }
     },
     "security": [

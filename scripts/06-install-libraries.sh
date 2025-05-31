@@ -12,5 +12,4 @@ if ! is_wine_python_package_installed "MetaTrader5"; then
     $wine_executable python -m pip install --no-cache-dir -r /app/requirements.txt
 fi
 
-# Install Gecko if not present
 

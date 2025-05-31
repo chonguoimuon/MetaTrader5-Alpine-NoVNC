@@ -19,7 +19,7 @@ if [ ! -e "/config/.wine/drive_c/windows/mono" ]; then
     else
         log_message "ERROR" "Failed to download Mono installer."
     fi
-  # Install Gecko if not present  
+  # Install Gecko
     log_message "INFO" "Downloading and installing Gecko..."
     wget -O /tmp/Gecko.msi https://dl.winehq.org/wine/wine-gecko/2.47.4/wine-gecko-2.47.4-x86_64.msi > /dev/null 2>&1
     if [ $? -eq 0 ]; then
@@ -36,6 +36,3 @@ if [ ! -e "/config/.wine/drive_c/windows/mono" ]; then
 else
     log_message "INFO" "Mono is already installed."
 fi
-
-# Initialize Wine configuration
-#winecfg
