@@ -10,7 +10,7 @@ services:
       - PASSWORD=${PASSWORD}
       - MT5_API_AUTH_TOKEN=${MT5_API_AUTH_TOKEN}
     ports:
-      - "3000:3000"  # Internal port for VNC
+      - "6080:6080"  # Internal port for VNC
       - "5001:5001"  # Internal port for API
     volumes:
       - config:/config
