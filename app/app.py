@@ -6,6 +6,7 @@ import MetaTrader5 as mt5
 from flasgger import Swagger
 from werkzeug.middleware.proxy_fix import ProxyFix
 from swagger import swagger_config
+from telegram_utils import load_telegram_config  # Thêm import để load cấu hình Telegram
 
 # Import routes
 from routes.health import health_bp
@@ -30,6 +31,9 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 
 # Load the API token from environment variable
 MT5_API_AUTH_TOKEN = os.environ.get('MT5_API_AUTH_TOKEN')
+
+# Load Telegram configuration from file at startup
+load_telegram_config()
 
 # Middleware to check Authorization header
 @app.before_request

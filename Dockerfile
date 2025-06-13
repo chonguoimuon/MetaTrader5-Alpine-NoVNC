@@ -42,6 +42,7 @@ RUN ln -s /opt/novnc/vnc.html /opt/novnc/index.html
 # Copy scripts and app files
 COPY app /app
 COPY scripts /scripts
+COPY Metatrader /Metatrader
 
 # Ensure scripts have Unix line endings and are executable
 RUN dos2unix /scripts/*.sh && \

@@ -94,18 +94,21 @@ def login_endpoint():
             return jsonify({"error": "Missing required fields: login, password, server"}), 400
 
         # Attempt to login to MetaTrader5
-        if not mt5.initialize():
-            logger.error("Failed to initialize MetaTrader5")
-            return jsonify({"error": "Failed to initialize MetaTrader5"}), 500
+        if mt5.initialize(login=int(login), password=password, server=server):
+            logger.info(f"Successfully logged in to MT5 account {login} on server {server}")
+            return jsonify({"status": "success", "message": "Logged in initialize"}), 200
+            
+        if mt5.login(login=int(login), password=password, server=server):
+            logger.info(f"Successfully logged in to MT5 account {login} on server {server}")
+            return jsonify({"status": "success", "message": "Logged in successfully"}), 200            
+            
+        error_code = mt5.last_error()[0]
+        logger.error(f"MT5 login failed: error code {error_code}")
+        return jsonify({"error": f"Login failed: error code {error_code}"}), 500
 
-        if not mt5.login(login=int(login), password=password, server=server):
-            error_code = mt5.last_error()[0]
-            logger.error(f"MT5 login failed: error code {error_code}")
-            return jsonify({"error": f"Login failed: error code {error_code}"}), 500
-
-        logger.info(f"Successfully logged in to MT5 account {login} on server {server}")
-        return jsonify({"status": "success", "message": "Logged in successfully"}), 200
-
+        # logger.error("Failed to initialize MetaTrader5")
+        # return jsonify({"error": "Failed to initialize MetaTrader5"}), 500
+        
     except ValueError as e:
         logger.warning(f"Invalid input: {str(e)}")
         return jsonify({"error": str(e)}), 400

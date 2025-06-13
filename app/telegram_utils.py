@@ -2,21 +2,74 @@ import logging
 import requests
 import MetaTrader5 as mt5
 from datetime import datetime
+import json
+import os
 
 logger = logging.getLogger(__name__)
 
-# Cấu hình Telegram lưu trong bộ nhớ
-telegram_config = {
+# Đường dẫn tới thư mục cấu hình trong volume
+CONFIG_DIR = "/config"
+CONFIG_FILE = os.path.join(CONFIG_DIR, "signal_config.json")
+
+# Tạo thư mục config nếu chưa tồn tại
+if not os.path.exists(CONFIG_DIR):
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        logger.info(f"Created config directory: {CONFIG_DIR}")
+    except Exception as e:
+        logger.error(f"Failed to create config directory {CONFIG_DIR}: {str(e)}")
+        raise
+
+# Cấu hình Telegram mặc định
+DEFAULT_CONFIG = {
     "bot_token": "",
     "chat_id": "",
     "enabled": False,
-    "send_open": True,  # Mặc định bật gửi tín hiệu mở vị thế
-    "send_close": True,  # Mặc định bật gửi tín hiệu đóng vị thế
-    "send_modify_tp_sl": True  # Mặc định bật gửi tín hiệu sửa TP/SL
+    "send_open": True,
+    "send_close": True,
+    "send_modify_tp_sl": True
 }
 
+# Biến toàn cục để lưu cấu hình trong bộ nhớ
+telegram_config = DEFAULT_CONFIG.copy()
+
+def load_telegram_config():
+    """Load cấu hình Telegram từ file signal_config.json."""
+    global telegram_config
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r') as f:
+                loaded_config = json.load(f)
+                # Cập nhật telegram_config với các giá trị từ file, giữ mặc định nếu thiếu
+                telegram_config.update({
+                    key: loaded_config.get(key, DEFAULT_CONFIG[key])
+                    for key in DEFAULT_CONFIG
+                })
+                logger.info(f"Telegram config loaded from {CONFIG_FILE}")
+        else:
+            logger.info(f"No signal_config.json found at {CONFIG_FILE}, using default Telegram config")
+            save_telegram_config()  # Tạo file mới với cấu hình mặc định
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in {CONFIG_FILE}: {str(e)}")
+        telegram_config = DEFAULT_CONFIG.copy()
+        save_telegram_config()  # Tạo lại file nếu JSON không hợp lệ
+    except Exception as e:
+        logger.error(f"Error loading Telegram config from {CONFIG_FILE}: {str(e)}")
+        telegram_config = DEFAULT_CONFIG.copy()
+        save_telegram_config()  # Lưu cấu hình mặc định nếu lỗi
+
+def save_telegram_config():
+    """Lưu cấu hình Telegram vào file signal_config.json."""
+    try:
+        with open(CONFIG_FILE, 'w') as f:
+            json.dump(telegram_config, f, indent=4)
+        logger.info(f"Telegram config saved to {CONFIG_FILE}")
+    except Exception as e:
+        logger.error(f"Error saving Telegram config to {CONFIG_FILE}: {str(e)}")
+        raise
+
 def set_telegram_config(bot_token, chat_id, send_open=None, send_close=None, send_modify_tp_sl=None):
-    """Thiết lập hoặc cập nhật cấu hình Telegram."""
+    """Thiết lập hoặc cập nhật cấu hình Telegram và lưu vào file."""
     try:
         telegram_config["bot_token"] = bot_token
         telegram_config["chat_id"] = chat_id
@@ -27,7 +80,8 @@ def set_telegram_config(bot_token, chat_id, send_open=None, send_close=None, sen
             telegram_config["send_close"] = bool(send_close)
         if send_modify_tp_sl is not None:
             telegram_config["send_modify_tp_sl"] = bool(send_modify_tp_sl)
-        logger.info("Telegram config updated in memory.")
+        save_telegram_config()  # Lưu cấu hình vào file
+        logger.info("Telegram config updated and saved to signal_config.json")
     except Exception as e:
         logger.error(f"Error setting Telegram config: {str(e)}")
         raise
@@ -91,7 +145,7 @@ def format_trade_signal(deal, position_ticket=None, action="open", **kwargs):
             f"**Volume**: {volume:.2f}\n"
             f"**Price**: {price:.5f}\n"
             f"**Time**: {time_str}\n"
-            f"**Position Ticket**: {position_ticket if position_ticket else 'N/A'}"
+            f"**Position Ticket**: #ES{position_ticket if position_ticket else 'N/A'}"
         )
     elif action == "close":
         profit = deal_dict.get("profit", 0.0)
@@ -103,7 +157,7 @@ def format_trade_signal(deal, position_ticket=None, action="open", **kwargs):
             f"**Close Price**: {price:.5f}\n"
             f"**Profit**: {profit:.2f}\n"
             f"**Time**: {time_str}\n"
-            f"**Position Ticket**: {position_ticket if position_ticket else 'N/A'}"
+            f"**Position Ticket**: #ES{position_ticket if position_ticket else 'N/A'}"
         )
     elif action == "modify_tp_sl":
         old_tp = kwargs.get("old_tp", 0.0)
@@ -129,7 +183,7 @@ def format_trade_signal(deal, position_ticket=None, action="open", **kwargs):
         message = (
             "♻️ *TP/SL Modified (MT5)*\n"
             f"**Symbol**: {symbol}\n"
-            f"**Position Ticket**: {position_ticket if position_ticket else 'N/A'}\n"
+            f"**Position Ticket**: #ES{position_ticket if position_ticket else 'N/A'}\n"
             f"{changes_text}\n"
             f"**Time**: {time_str}"
         )
