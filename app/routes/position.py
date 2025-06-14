@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 import MetaTrader5 as mt5
 import logging
-from lib import close_position, close_all_positions, get_positions, apply_trailing_stop
+from lib import close_position, close_all_positions, get_positions, apply_trailing_stop, ensure_symbol_in_marketwatch
 from flasgger import swag_from
 import pandas as pd # Import pandas for dataframe handling
 
@@ -194,6 +194,10 @@ def close_all_positions_endpoint():
         comment = data.get('comment', '')
         symbol = data.get('symbol', '')
         type_filling_str = data.get('type_filling', 'ORDER_FILLING_IOC').upper()
+        
+        # Ensure symbol is in MarketWatch if provided as a filter
+        if symbol and not ensure_symbol_in_marketwatch(symbol):
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400        
         
         # Map filling type string to MT5 constant
         type_filling_map = {
@@ -403,6 +407,10 @@ def get_positions_endpoint():
         magic = data.get('magic')
         comment = data.get('comment', '')
         symbol = data.get('symbol', '')
+
+        # Ensure symbol is in MarketWatch if provided as a filter
+        if symbol and not ensure_symbol_in_marketwatch(symbol):
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400
 
         positions_df = get_positions(symbol, comment, magic)
 
@@ -656,5 +664,4 @@ def list_trailing_stop_jobs_endpoint():
     except Exception as e:
         logger.error(f"Error in list_trailing_stop_jobs_endpoint: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
-
 

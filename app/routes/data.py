@@ -5,7 +5,7 @@ from datetime import datetime
 import pytz
 import pandas as pd
 from flasgger import swag_from
-from lib import get_timeframe
+from lib import get_timeframe, ensure_symbol_in_marketwatch
 
 data_bp = Blueprint('data', __name__)
 logger = logging.getLogger(__name__)
@@ -83,6 +83,11 @@ def fetch_data_pos_endpoint():
         
         if not symbol:
             return jsonify({"error": "Symbol parameter is required"}), 400
+
+        # Ensure symbol is in MarketWatch
+        if not ensure_symbol_in_marketwatch(symbol):
+            logger.error(f"Failed to add symbol {symbol} to MarketWatch.")
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400
 
         mt5_timeframe = get_timeframe(timeframe)
         
@@ -183,6 +188,11 @@ def fetch_data_range_endpoint():
         
         if not all([symbol, start_str, end_str]):
             return jsonify({"error": "Symbol, start, and end parameters are required"}), 400
+
+        # Ensure symbol is in MarketWatch
+        if not ensure_symbol_in_marketwatch(symbol):
+            logger.error(f"Failed to add symbol {symbol} to MarketWatch.")
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400
 
         mt5_timeframe = get_timeframe(timeframe)
         

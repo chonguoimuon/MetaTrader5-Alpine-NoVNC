@@ -7,6 +7,35 @@ from constants import MT5Timeframe # Assuming constants.py exists and has MT5Tim
 
 logger = logging.getLogger(__name__)
 
+def ensure_symbol_in_marketwatch(symbol: str) -> bool:
+    """
+    Ensure a symbol is added to MarketWatch.
+    
+    Args:
+        symbol: The trading symbol to add (e.g., 'EURUSD').
+    
+    Returns:
+        bool: True if symbol is in MarketWatch or was successfully added, False otherwise.
+    """
+    if not mt5.initialize():
+        logger.error("MT5 initialization failed when checking symbol in MarketWatch.")
+        return False
+    
+    # Check if symbol is already in MarketWatch
+    symbol_info = mt5.symbol_info(symbol)
+    if symbol_info is not None and symbol_info.visible:
+        logger.debug(f"Symbol {symbol} is already in MarketWatch.")
+        return True
+    
+    # Try to add symbol to MarketWatch
+    if mt5.symbol_select(symbol, True):
+        logger.info(f"Symbol {symbol} successfully added to MarketWatch.")
+        return True
+    else:
+        error_code, error_str = mt5.last_error()
+        logger.error(f"Failed to add symbol {symbol} to MarketWatch: {error_str} (Error code: {error_code})")
+        return False
+
 def get_timeframe(timeframe_str: str) -> MT5Timeframe:
     try:
         return MT5Timeframe[timeframe_str.upper()].value
@@ -376,4 +405,3 @@ def apply_trailing_stop(position_ticket: int, trailing_distance: float):
 
     logger.info(f"Successfully applied trailing stop for position {position_ticket}. New SL: {formatted_new_sl}. MT5 Result: {result._asdict()}")
     return result._asdict() # Modification successful
-

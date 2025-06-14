@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify
 import MetaTrader5 as mt5
 from flasgger import swag_from
 import logging
+from lib import ensure_symbol_in_marketwatch
 
 symbol_bp = Blueprint('symbol', __name__)
 logger = logging.getLogger(__name__)
@@ -9,7 +10,7 @@ logger = logging.getLogger(__name__)
 @symbol_bp.route('/symbol_info_tick/<symbol>', methods=['GET'])
 @swag_from({
     'tags': ['Symbol'],
-    'security': [{'ApiKeyAuth': []}],  # Updated to ApiKeyAuth
+    'security': [{'ApiKeyAuth': []}],
     'parameters': [
         {
             'name': 'symbol',
@@ -33,8 +34,14 @@ logger = logging.getLogger(__name__)
                 }
             }
         },
+        400: {
+            'description': 'Failed to add symbol to MarketWatch.'
+        },
         404: {
             'description': 'Failed to get symbol tick info.'
+        },
+        500: {
+            'description': 'Internal server error.'
         }
     }
 })
@@ -44,17 +51,31 @@ def get_symbol_info_tick_endpoint(symbol):
     ---
     description: Retrieve the latest tick information for a given symbol.
     """
-    tick = mt5.symbol_info_tick(symbol)
-    if tick is None:
-        return jsonify({"error": "Failed to get symbol tick info"}), 404
+    try:
+        if not mt5.initialize():
+            logger.error("MT5 initialization failed in get_symbol_info_tick.")
+            return jsonify({"error": "MT5 initialization failed"}), 500
+
+        if not ensure_symbol_in_marketwatch(symbol):
+            logger.error(f"Failed to add symbol {symbol} to MarketWatch.")
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400
+        
+        tick = mt5.symbol_info_tick(symbol)
+        if tick is None:
+            logger.error(f"Failed to get tick info for symbol {symbol}.")
+            return jsonify({"error": "Failed to get symbol tick info"}), 404
+        
+        tick_dict = tick._asdict()
+        return jsonify(tick_dict)
     
-    tick_dict = tick._asdict()
-    return jsonify(tick_dict)
+    except Exception as e:
+        logger.error(f"Error in get_symbol_info_tick: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500
 
 @symbol_bp.route('/symbol_info/<symbol>', methods=['GET'])
 @swag_from({
     'tags': ['Symbol'],
-    'security': [{'ApiKeyAuth': []}],  # Updated to ApiKeyAuth
+    'security': [{'ApiKeyAuth': []}],
     'parameters': [
         {
             'name': 'symbol',
@@ -80,12 +101,17 @@ def get_symbol_info_tick_endpoint(symbol):
                     'spread': {'type': 'number'},
                     'points': {'type': 'integer'},
                     'trade_mode': {'type': 'integer'},
-                    # Add other relevant fields as needed
                 }
             }
         },
+        400: {
+            'description': 'Failed to add symbol to MarketWatch.'
+        },
         404: {
             'description': 'Failed to get symbol info.'
+        },
+        500: {
+            'description': 'Internal server error.'
         }
     }
 })
@@ -95,9 +121,23 @@ def get_symbol_info(symbol):
     ---
     description: Retrieve detailed information for a given symbol.
     """
-    symbol_info = mt5.symbol_info(symbol)
-    if symbol_info is None:
-        return jsonify({"error": "Failed to get symbol info"}), 404
+    try:
+        if not mt5.initialize():
+            logger.error("MT5 initialization failed in get_symbol_info.")
+            return jsonify({"error": "MT5 initialization failed"}), 500
+
+        if not ensure_symbol_in_marketwatch(symbol):
+            logger.error(f"Failed to add symbol {symbol} to MarketWatch.")
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400
+        
+        symbol_info = mt5.symbol_info(symbol)
+        if symbol_info is None:
+            logger.error(f"Failed to get info for symbol {symbol}.")
+            return jsonify({"error": "Failed to get symbol info"}), 404
+        
+        symbol_info_dict = symbol_info._asdict()
+        return jsonify(symbol_info_dict)
     
-    symbol_info_dict = symbol_info._asdict()
-    return jsonify(symbol_info_dict)
+    except Exception as e:
+        logger.error(f"Error in get_symbol_info: {str(e)}")
+        return jsonify({"error": "Internal server error"}), 500

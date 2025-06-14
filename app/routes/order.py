@@ -8,6 +8,7 @@ import pytz # Import pytz for timezone handling
 
 # Import the worker function to add trailing stop jobs
 from trailing_stop_worker import add_trailing_stop_job_to_worker
+from lib import ensure_symbol_in_marketwatch
 
 order_bp = Blueprint('order', __name__)
 logger = logging.getLogger(__name__)
@@ -86,6 +87,10 @@ def post_order():
             return jsonify({"error": "symbol, volume, and type are required"}), 400
 
         symbol = str(data['symbol'])
+        # Ensure symbol is in MarketWatch
+        if not ensure_symbol_in_marketwatch(symbol):
+            return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400        
+        
         volume = float(data['volume'])
         order_type_str = data['type'].upper()
         deviation = int(data.get('deviation', 20))
@@ -243,5 +248,4 @@ def post_order():
     except Exception as e:
         logger.error(f"Error in post_order: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
-
 
