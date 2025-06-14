@@ -23,8 +23,10 @@ RUN apk add --no-cache \
     nginx \
     apache2-utils \
     xauth \
-    util-linux && \
+    util-linux \
+    alsa-lib && \
     mkdir -p /root/.vnc /config/.wine /var/log /etc/nginx/conf.d && \
+    echo "pcm.!default { type plug slave.pcm \"null\" }" > /etc/asound.conf && \
     touch /var/log/mt5_setup.log && \
     chmod 666 /var/log/mt5_setup.log && \
     touch /var/log/websockify.log && \
@@ -66,7 +68,9 @@ ENV DISPLAY=:1 \
     NOVNC_PORT=6080 \
     WEBSOCKIFY_PORT=6081 \
     WINEPREFIX=/config/.wine \
-    WINEDEBUG=-all,err-toolbar,fixme-all
+    WINEDEBUG=-all,err-toolbar,fixme-all \
+    WINEDLLOVERRIDES="winmm=b" \
+    WINE_ALSA_DRIVER=0
 
 # Expose ports for noVNC and Flask
 EXPOSE 6080 5001
