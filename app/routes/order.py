@@ -4,9 +4,8 @@ import logging
 from flasgger import swag_from
 import time
 from datetime import datetime, timedelta
-import pytz # Import pytz for timezone handling
+import pytz
 
-# Import the worker function to add trailing stop jobs
 from trailing_stop_worker import add_trailing_stop_job_to_worker
 from lib import ensure_symbol_in_marketwatch
 
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 @order_bp.route('/order', methods=['POST'])
 @swag_from({
     'tags': ['Order'],
-    'security': [{'ApiKeyAuth': []}],  # Updated to ApiKeyAuth
+    'security': [{'ApiKeyAuth': []}],
     'parameters': [
         {
             'name': 'body',
@@ -34,7 +33,8 @@ logger = logging.getLogger(__name__)
                     'type_filling': {'type': 'string', 'enum': ['ORDER_FILLING_IOC', 'ORDER_FILLING_FOK', 'ORDER_FILLING_RETURN'], 'description': 'Order filling type (IOC, FOK, or RETURN).'},
                     'sl': {'type': 'number', 'description': 'Optional Stop Loss price.'},
                     'tp': {'type': 'number', 'description': 'Optional Take Profit price.'},
-                    'ts': {'type': 'number', 'description': 'Optional Trailing Stop distance in points. If provided, trailing stop is enabled for the new position.'} # Added ts parameter
+                    'ts': {'type': 'number', 'description': 'Optional Trailing Stop distance in points. If provided, trailing stop is enabled for the new position.'},
+                    'token': {'type': 'string', 'description': 'API token for authentication if Authorization header is not provided.'}
                 },
                 'required': ['symbol', 'volume', 'type']
             }
@@ -51,19 +51,17 @@ logger = logging.getLogger(__name__)
                         'type': 'object',
                         'properties': {
                             'retcode': {'type': 'integer'},
-                            'order': {'type': 'integer'}, # Order ticket
-                            'deal': {'type': 'integer'},   # Deal ticket
-                            # 'position': {'type': 'integer'}, # Removed direct position from result schema
+                            'order': {'type': 'integer'},
+                            'deal': {'type': 'integer'},
                             'magic': {'type': 'integer'},
                             'price': {'type': 'number'},
                             'volume': {'type': 'number'},
                             'symbol': {'type': 'string'},
                             'comment': {'type': 'string'}
-                            # Add other relevant fields as needed
                         }
                     },
-                    'position_ticket': {'type': 'integer', 'description': 'Ticket of the newly created position, if any.'}, # Added position ticket to top level
-                    'trailing_stop_status': {'type': 'string', 'description': 'Status of trailing stop activation (e.g., "activated", "not requested", "failed").'} # Added trailing stop status
+                    'position_ticket': {'type': 'integer', 'description': 'Ticket of the newly created position, if any.'},
+                    'trailing_stop_status': {'type': 'string', 'description': 'Status of trailing stop activation (e.g., "activated", "not requested", "failed").'}
                 }
             }
         },
@@ -79,7 +77,7 @@ def post_order():
     """
     Place a Market Order
     ---
-    description: Place a market buy or sell order for a given symbol and volume.
+    description: Place a market buy or sell order for a given symbol and volume. Authenticate using Authorization header or token in request body.
     """
     try:
         data = request.get_json()
@@ -87,7 +85,6 @@ def post_order():
             return jsonify({"error": "symbol, volume, and type are required"}), 400
 
         symbol = str(data['symbol'])
-        # Ensure symbol is in MarketWatch
         if not ensure_symbol_in_marketwatch(symbol):
             return jsonify({"error": f"Failed to add symbol {symbol} to MarketWatch"}), 400        
         
@@ -97,9 +94,8 @@ def post_order():
         magic = int(data.get('magic', 0))
         comment = str(data.get('comment', ''))
         type_filling_str = data.get('type_filling', 'ORDER_FILLING_IOC').upper()
-        ts_distance = data.get('ts') # Get the optional 'ts' parameter
+        ts_distance = data.get('ts')
 
-        # Map order type string to MT5 constant
         order_type_map = {
             'BUY': mt5.ORDER_TYPE_BUY,
             'SELL': mt5.ORDER_TYPE_SELL
@@ -108,7 +104,6 @@ def post_order():
         if order_type is None:
             return jsonify({"error": f"Invalid order type: {order_type_str}. Must be 'BUY' or 'SELL'."}), 400
 
-        # Map filling type string to MT5 constant
         type_filling_map = {
             'ORDER_FILLING_IOC': mt5.ORDER_FILLING_IOC,
             'ORDER_FILLING_FOK': mt5.ORDER_FILLING_FOK,
@@ -118,8 +113,6 @@ def post_order():
         if type_filling is None:
              return jsonify({"error": f"Invalid filling type: {type_filling_str}. Must be 'ORDER_FILLING_IOC', 'ORDER_FILLING_FOK', or 'ORDER_FILLING_RETURN'."}), 400
 
-
-        # Get current price for market order
         tick = mt5.symbol_info_tick(symbol)
         if tick is None:
             logger.error(f"Failed to get tick for symbol: {symbol}")
@@ -129,7 +122,6 @@ def post_order():
         if price == 0.0:
              logger.error(f"Invalid price retrieved for symbol: {symbol}")
              return jsonify({"error": f"Invalid price retrieved for symbol: {symbol}"}), 400
-
 
         request_data = {
             "action": mt5.TRADE_ACTION_DEAL,
@@ -144,7 +136,6 @@ def post_order():
             "type_filling": type_filling,
         }
 
-        # Add optional SL/TP if provided in the request body
         if 'sl' in data and data['sl'] is not None:
             request_data["sl"] = float(data['sl'])
         if 'tp' in data and data['tp'] is not None:
@@ -152,19 +143,14 @@ def post_order():
 
         logger.info(f"Sending order request: {request_data}")
 
-        # Send order
         result = mt5.order_send(request_data)
-
         logger.debug(f"Order result: {result}")
 
-        # Check if result is None before accessing retcode
         if result is None or result.retcode != mt5.TRADE_RETCODE_DONE:
             error_code, error_str = mt5.last_error()
-            # Include MT5 error in the response if result is None
             error_message = result.comment if result else "MT5 order_send returned None"
-            logger.error(f"Order failed: {error_message}. MT5 Error: {error_str}") # Log the failure
+            logger.error(f"Order failed: {error_message}. MT5 Error: {error_str}")
 
-            # Check if result is not None before trying to access _asdict()
             return jsonify({
                 "error": f"Order failed: {error_message}",
                 "mt5_error": error_str,
@@ -173,50 +159,32 @@ def post_order():
 
         logger.info(f"Order executed successfully. Result: {result._asdict()}")
 
-        # --- Trailing Stop Activation Logic ---
         trailing_stop_status = "not requested"
-        position_ticket = None # Initialize position_ticket
+        position_ticket = None
 
         if ts_distance is not None:
-            # Order was successful, now try to find the resulting position
-            # The deal ticket is available in result.deal
             deal_ticket = result.deal
-            if deal_ticket != 0: # Check if a deal was created
+            if deal_ticket != 0:
                 logger.info(f"Order resulted in deal ticket: {deal_ticket}. Attempting to find associated position.")
-                # Retrieve the deal to get the position ID
-                # Search for deals in a small time window around the current time
-                utc_now = datetime.now(pytz.UTC) # Use pytz.UTC for timezone
-                from_date = utc_now - timedelta(seconds=5) # Look back a few seconds
-                to_date = utc_now + timedelta(seconds=1) # Look forward a little
+                utc_now = datetime.now(pytz.UTC)
+                from_date = utc_now - timedelta(seconds=5)
+                to_date = utc_now + timedelta(seconds=1)
 
-                # Fetch deals by ticket to be more precise
-                # Using history_deals_get with ticket is the most reliable way to get a specific deal
                 deals = mt5.history_deals_get(ticket=deal_ticket)
-
-
                 found_position_ticket = None
                 if deals:
                     for deal in deals:
-                        # Find the deal matching the ticket and associated with a position
-                        # Also ensure the deal is related to the order that was just sent (check order)
-                        # Note: result.order contains the order ticket
-                        if deal.ticket == deal_ticket and deal.position_id != 0 and deal.order == result.order: # Corrected from deal.order_id
+                        if deal.ticket == deal_ticket and deal.position_id != 0 and deal.order == result.order:
                             found_position_ticket = deal.position_id
                             logger.info(f"Found position ticket {found_position_ticket} for deal {deal_ticket} and order {result.order}.")
-                            break # Found the position, no need to check other deals
+                            break
 
                 if found_position_ticket:
-                    position_ticket = found_position_ticket # Set the position_ticket for the response
-                    # Now get the position details to get the open price
+                    position_ticket = found_position_ticket
                     positions = mt5.positions_get(ticket=position_ticket)
                     if positions and len(positions) > 0:
                         new_position = positions[0]
-                        # Use the open price of the new position as the initial_sl_price for the worker
-                        #initial_sl_for_ts = new_position.price_open
-                        #logger.info(f"Found new position {position_ticket} with open price {initial_sl_for_ts}. Attempting to add trailing stop job to worker with distance {ts_distance}.")
-                        # Add the trailing stop job to the worker
-                        added_to_worker = add_trailing_stop_job_to_worker(position_ticket, float(ts_distance)) #, initial_sl_price=initial_sl_for_ts)
-
+                        added_to_worker = add_trailing_stop_job_to_worker(position_ticket, float(ts_distance))
                         if added_to_worker:
                             trailing_stop_status = "activated"
                             logger.info(f"Trailing stop job added to worker for position {position_ticket}.")
@@ -232,20 +200,17 @@ def post_order():
             else:
                 trailing_stop_status = "not activated (no deal created)"
                 logger.warning(f"Order executed successfully but did not result in a deal (ticket {result.order}). Trailing stop not activated.")
-        # --- End Trailing Stop Activation Logic ---
-
 
         response_data = {
             "message": "Order executed successfully",
             "result": result._asdict(),
-            "trailing_stop_status": trailing_stop_status # Include the trailing stop status in the response
+            "trailing_stop_status": trailing_stop_status
         }
         if position_ticket is not None:
-             response_data["position_ticket"] = position_ticket # Add position ticket to response if found
+             response_data["position_ticket"] = position_ticket
 
         return jsonify(response_data)
 
     except Exception as e:
         logger.error(f"Error in post_order: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
-

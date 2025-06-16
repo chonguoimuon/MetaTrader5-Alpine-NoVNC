@@ -2,9 +2,55 @@ from flask import Blueprint, jsonify, request
 import MetaTrader5 as mt5
 import logging
 from flasgger import swag_from
+import json
+import os
+import uuid
 
 login_bp = Blueprint('login', __name__)
 logger = logging.getLogger(__name__)
+
+# Đường dẫn tới thư mục cấu hình trong volume
+CONFIG_DIR = "/config"
+TOKEN_FILE = os.path.join(CONFIG_DIR, "api_token.json")
+
+# Tạo thư mục config nếu chưa tồn tại
+if not os.path.exists(CONFIG_DIR):
+    try:
+        os.makedirs(CONFIG_DIR, exist_ok=True)
+        logger.info(f"Created config directory: {CONFIG_DIR}")
+    except Exception as e:
+        logger.error(f"Failed to create config directory {CONFIG_DIR}: {str(e)}")
+        raise
+
+def load_api_token():
+    """Load API token từ file api_token.json."""
+    try:
+        if os.path.exists(TOKEN_FILE):
+            with open(TOKEN_FILE, 'r') as f:
+                data = json.load(f)
+                return data.get("token", "")
+        else:
+            logger.info(f"No api_token.json found at {TOKEN_FILE}, creating new token.")
+            return generate_and_save_token()
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in {TOKEN_FILE}: {str(e)}")
+        return generate_and_save_token()
+    except Exception as e:
+        logger.error(f"Error loading API token from {TOKEN_FILE}: {str(e)}")
+        return generate_and_save_token()
+
+def generate_and_save_token():
+    """Tạo token mới và lưu vào file api_token.json."""
+    try:
+        new_token = str(uuid.uuid4())
+        token_data = {"token": new_token}
+        with open(TOKEN_FILE, 'w') as f:
+            json.dump(token_data, f, indent=4)
+        logger.info(f"New API token generated and saved to {TOKEN_FILE}")
+        return new_token
+    except Exception as e:
+        logger.error(f"Error generating/saving API token to {TOKEN_FILE}: {str(e)}")
+        raise
 
 @login_bp.route('/login', methods=['POST'])
 @swag_from({
@@ -80,7 +126,6 @@ def login_endpoint():
     Login to MetaTrader5 account
     """
     try:
-        # Get JSON body
         data = request.get_json()
         if not data:
             return jsonify({"error": "Request body must be JSON"}), 400
@@ -89,25 +134,20 @@ def login_endpoint():
         password = data.get('password')
         server = data.get('server')
 
-        # Validate input
         if not all([login, password, server]):
             return jsonify({"error": "Missing required fields: login, password, server"}), 400
 
-        # Attempt to login to MetaTrader5
         if mt5.initialize(login=int(login), password=password, server=server):
             logger.info(f"Successfully logged in to MT5 account {login} on server {server}")
             return jsonify({"status": "success", "message": "Logged in initialize"}), 200
             
         if mt5.login(login=int(login), password=password, server=server):
             logger.info(f"Successfully logged in to MT5 account {login} on server {server}")
-            return jsonify({"status": "success", "message": "Logged in successfully"}), 200            
+            return jsonify({"status": "success", "message": "Logged in successfully"}), 200
             
         error_code = mt5.last_error()[0]
         logger.error(f"MT5 login failed: error code {error_code}")
         return jsonify({"error": f"Login failed: error code {error_code}"}), 500
-
-        # logger.error("Failed to initialize MetaTrader5")
-        # return jsonify({"error": "Failed to initialize MetaTrader5"}), 500
         
     except ValueError as e:
         logger.warning(f"Invalid input: {str(e)}")
@@ -167,19 +207,16 @@ def account_info_endpoint():
     Retrieve all information about the current MetaTrader5 account
     """
     try:
-        # Check if MT5 is initialized
         if not mt5.initialize():
             logger.error("Failed to initialize MetaTrader5")
             return jsonify({"error": "Failed to initialize MetaTrader5"}), 500
 
-        # Get account information
         account_info = mt5.account_info()
         if account_info is None:
             error_code = mt5.last_error()[0]
             logger.error(f"Failed to retrieve account info: error code {error_code}")
             return jsonify({"error": f"Failed to retrieve account info: error code {error_code}"}), 500
 
-        # Convert account_info to dictionary
         account_info_dict = {
             'login': account_info.login,
             'trade_mode': account_info.trade_mode,
@@ -202,3 +239,89 @@ def account_info_endpoint():
     except Exception as e:
         logger.error(f"Error in account_info: {str(e)}")
         return jsonify({"error": "Internal server error"}), 500
+
+@login_bp.route('/generate_token', methods=['POST'])
+@swag_from({
+    'tags': ['Login'],
+    'security': [{'ApiKeyAuth': []}],
+    'responses': {
+        200: {
+            'description': 'New API token generated successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string', 'example': 'success'},
+                    'token': {'type': 'string', 'description': 'Newly generated API token'},
+                    'message': {'type': 'string', 'example': 'New API token generated and saved'}
+                }
+            }
+        },
+        500: {
+            'description': 'Failed to generate or save token',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
+def generate_token_endpoint():
+    """
+    Generate a new API token
+    """
+    try:
+        new_token = generate_and_save_token()
+        logger.info("New API token generated successfully")
+        return jsonify({
+            "status": "success",
+            "token": new_token,
+            "message": "New API token generated and saved"
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in generate_token: {str(e)}")
+        return jsonify({"error": "Failed to generate or save token"}), 500
+
+@login_bp.route('/get_token', methods=['GET'])
+@swag_from({
+    'tags': ['Login'],
+    'security': [{'ApiKeyAuth': []}],
+    'responses': {
+        200: {
+            'description': 'API token retrieved successfully',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'status': {'type': 'string', 'example': 'success'},
+                    'token': {'type': 'string', 'description': 'Current API token'},
+                    'message': {'type': 'string', 'example': 'API token retrieved'}
+                }
+            }
+        },
+        500: {
+            'description': 'Failed to retrieve token',
+            'schema': {
+                'type': 'object',
+                'properties': {
+                    'error': {'type': 'string'}
+                }
+            }
+        }
+    }
+})
+def get_token_endpoint():
+    """
+    Retrieve the current API token
+    """
+    try:
+        token = load_api_token()
+        logger.info("API token retrieved successfully")
+        return jsonify({
+            "status": "success",
+            "token": token,
+            "message": "API token retrieved"
+        }), 200
+    except Exception as e:
+        logger.error(f"Error in get_token: {str(e)}")
+        return jsonify({"error": "Failed to retrieve token"}), 500
